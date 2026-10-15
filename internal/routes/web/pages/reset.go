@@ -15,6 +15,7 @@ func GetResetPage(c *gin.Context) {
 	}
 
 	idToUse := c.Param("id")
+
 	c.HTML(http.StatusOK, "reset.tmpl", gin.H{
 		"Id":       idToUse,
 		"Username": user.Username,

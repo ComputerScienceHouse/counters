@@ -2,11 +2,15 @@ package database
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ComputerScienceHouse/counters/internal/models"
 	"github.com/jackc/pgx/v5"
 )
+
+const MAX_COUNTERS_IN_QUERY = 10
 
 func CreateCounterWithReset(ctx context.Context, userId string, username string, cReq *models.CreateCounterInput, rReq *models.CreateResetInput) (string, error) {
 	tx, err := db.Begin(ctx)
@@ -45,42 +49,61 @@ func CreateCounterWithReset(ctx context.Context, userId string, username string,
 	return counterId, nil
 }
 
-func GetCounters(ctx context.Context) ([]*models.CounterListPart, error) {
-	rows, err := db.Query(ctx, `
-		SELECT c.counter_id, c.user_id, c.title, c.description, r.description, r.username, r.occured_at FROM counters c
+func GetCounters(ctx context.Context, filter *models.GetCountersFilter) ([]*models.GetCountersCounterPart, error) {
+	args := make([]any, 0)
+
+	postQuery := `
+		SELECT c.counter_id, c.title, r.description, r.username, r.occured_at FROM counters c
 		JOIN resets r ON c.last_reset = r.reset_id
-		ORDER BY r.occured_at DESC
-	`)
+	`
+	if filter.Timestamp != nil {
+		args = append(args, time.Unix(*filter.Timestamp, 0))
+
+		if filter.SortDescending {
+			postQuery = fmt.Sprintf("%s AND r.occured_at < $%d", postQuery, len(args))
+		} else {
+			postQuery = fmt.Sprintf("%s AND r.occured_at > $%d", postQuery, len(args))
+		}
+	}
+
+	if filter.Name != nil && strings.TrimSpace(*filter.Name) != "" {
+		args = append(args, "%"+*filter.Name+"%")
+		postQuery = fmt.Sprintf("%s AND c.title ILIKE $%d", postQuery, len(args))
+	}
+
+	if filter.SortDescending {
+		postQuery = fmt.Sprintf("%s ORDER BY r.occured_at DESC LIMIT %d", postQuery, MAX_COUNTERS_IN_QUERY)
+	} else {
+		postQuery = fmt.Sprintf("%s ORDER BY r.occured_at ASC LIMIT %d", postQuery, MAX_COUNTERS_IN_QUERY)
+	}
+
+	rows, err := db.Query(ctx, postQuery, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	counters := make([]*models.CounterListPart, 0)
+	counters := make([]*models.GetCountersCounterPart, 0)
 
 	for rows.Next() {
 		var (
-			counterId          string
-			counterOwnerID     string
-			counterTitle       string
-			counterDescription string
-			resetDescription   string
-			resetUsername      string
-			resetCreatedAt     time.Time
+			counterId        string
+			counterTitle     string
+			resetDescription string
+			resetUsername    string
+			resetCreatedAt   time.Time
 		)
 
-		if err := rows.Scan(&counterId, &counterOwnerID, &counterTitle, &counterDescription, &resetDescription, &resetUsername, &resetCreatedAt); err != nil {
+		if err := rows.Scan(&counterId, &counterTitle, &resetDescription, &resetUsername, &resetCreatedAt); err != nil {
 			return nil, err
 		}
 
-		counters = append(counters, &models.CounterListPart{
-			CounterID:          counterId,
-			CounterOwner:       counterOwnerID,
-			CounterTitle:       counterTitle,
-			CounterDescription: counterDescription,
-			ResetDescription:   resetDescription,
-			ResetUsername:      resetUsername,
-			ResetOccuredAt:     resetCreatedAt.Unix(),
+		counters = append(counters, &models.GetCountersCounterPart{
+			CounterID:        counterId,
+			CounterTitle:     counterTitle,
+			ResetDescription: resetDescription,
+			ResetUsername:    resetUsername,
+			ResetTimestamp:   resetCreatedAt.Unix(),
 		})
 	}
 

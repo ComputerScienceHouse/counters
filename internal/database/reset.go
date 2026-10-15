@@ -2,12 +2,15 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/ComputerScienceHouse/counters/internal/models"
 	"github.com/ComputerScienceHouse/counters/internal/util"
 	"github.com/jackc/pgx/v5"
 )
+
+const MAX_RESETS_IN_QUERY = 10
 
 func CreateReset(ctx context.Context, userID string, username string, req *models.CreateResetInput) (string, error) {
 	resetID, err := GenerateUUID()
@@ -73,12 +76,31 @@ func GetCounterFromReset(ctx context.Context, resetID string) (string, error) {
 	return counterID, nil
 }
 
-func GetResetsFromCounterId(ctx context.Context, counterID string) ([]*models.ResetListPart, error) {
-	rows, err := db.Query(ctx, `
+func GetResetsFromCounterId(ctx context.Context, counterID string, filter *models.GetResetsFilter) ([]*models.ResetListPart, error) {
+	args := make([]any, 0)
+	args = append(args, counterID)
+
+	postQuery := `
 		SELECT r.reset_id, r.description, r.user_id, r.username, r.occured_at FROM resets r
 		WHERE r.counter_id = $1
-		ORDER BY r.occured_at DESC
-	`, counterID)
+	`
+	if filter.Timestamp != nil {
+		args = append(args, time.Unix(*filter.Timestamp, 0))
+
+		if filter.SortDescending {
+			postQuery = fmt.Sprintf("%s AND r.occured_at < $%d", postQuery, len(args))
+		} else {
+			postQuery = fmt.Sprintf("%s AND r.occured_at > $%d", postQuery, len(args))
+		}
+	}
+
+	if filter.SortDescending {
+		postQuery = fmt.Sprintf("%s ORDER BY r.occured_at DESC LIMIT %d", postQuery, MAX_RESETS_IN_QUERY)
+	} else {
+		postQuery = fmt.Sprintf("%s ORDER BY r.occured_at ASC LIMIT %d", postQuery, MAX_RESETS_IN_QUERY)
+	}
+
+	rows, err := db.Query(ctx, postQuery, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -92,10 +114,10 @@ func GetResetsFromCounterId(ctx context.Context, counterID string) ([]*models.Re
 			resetDescription string
 			resetOwner       string
 			resetUsername    string
-			resetOccuredAt   time.Time
+			resetOccurredAt  time.Time
 		)
 
-		if err := rows.Scan(&resetId, &resetDescription, &resetOwner, &resetUsername, &resetOccuredAt); err != nil {
+		if err := rows.Scan(&resetId, &resetDescription, &resetOwner, &resetUsername, &resetOccurredAt); err != nil {
 			return nil, err
 		}
 
@@ -104,7 +126,7 @@ func GetResetsFromCounterId(ctx context.Context, counterID string) ([]*models.Re
 			ResetDescription: resetDescription,
 			ResetOwner:       resetOwner,
 			ResetUsername:    resetUsername,
-			ResetOccuredAt:   resetOccuredAt.Unix(),
+			ResetOccurredAt:  resetOccurredAt.Unix(),
 		})
 	}
 
