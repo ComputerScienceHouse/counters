@@ -1,7 +1,9 @@
 package counters
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/ComputerScienceHouse/counters/internal/database"
 	"github.com/ComputerScienceHouse/counters/internal/logging"
@@ -12,38 +14,42 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func GetCounter(c *gin.Context) {
-	user, err := users.GetCSHAuth(c)
+func GetCounters(c *gin.Context) {
+	_, err := users.GetCSHAuth(c)
 	if err != nil {
 		c.Status(http.StatusUnauthorized)
 		return
 	}
-	idToUse := c.Param("id")
 
-	counter, err := database.GetCounterFromId(c.Request.Context(), idToUse)
-	if err != nil {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Second*15)
+	defer cancel()
+
+	var req models.GetCountersInput
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		logging.Logger.WithFields(logrus.Fields{"module": "counter", "error": err}).Warning("Error binding req")
 		c.Status(http.StatusBadRequest)
 		return
 	}
 
-	resets, err := database.GetResetsFromCounterId(c.Request.Context(), idToUse)
+	counters, err := database.GetCounters(ctx, &req.Filter)
 	if err != nil {
+		logging.Logger.WithFields(logrus.Fields{"module": "counter", "error": err}).Warning("error getting counters!")
 		c.Status(http.StatusBadRequest)
 		return
 	}
 
-	c.HTML(200, "counter.tmpl", gin.H{
-		"Id":          counter.CounterID,
-		"CounterID":   counter.CounterOwner,
-		"Title":       counter.CounterTitle,
-		"Description": counter.CounterDescription,
-		"Timestamp":   counter.ResetOccuredAt,
-		"History":     resets,
-		"Username":    user.Username,
-		"FullName":    user.FullName,
-		"UserID":      user.Uuid,
-		"EBoard":      users.IsEboard(user),
-		"RTP":         users.IsActiveRTP(user),
+	var hasMore bool = false
+	var timestamp int64 = 0
+	if len(counters) > 1 {
+		hasMore = (len(counters) > (database.MAX_COUNTERS_IN_QUERY)-1)
+		timestamp = counters[len(counters)-1].ResetTimestamp
+	}
+
+	c.JSON(http.StatusOK, models.GetCountersOutput{
+		Counters:  counters,
+		HasMore:   hasMore,
+		Timestamp: &timestamp,
 	})
 }
 
@@ -55,6 +61,9 @@ func DeleteCounter(c *gin.Context) {
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Second*15)
+	defer cancel()
+
 	var req models.DeleteCounterInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		logging.Logger.WithFields(logrus.Fields{"module": "counter", "error": err}).Warning("Error casting request")
@@ -62,7 +71,7 @@ func DeleteCounter(c *gin.Context) {
 		return
 	}
 
-	counterOwner, err := database.GetCounterOwner(c.Request.Context(), req.RowID)
+	counterOwner, err := database.GetCounterOwner(ctx, req.RowID)
 	if err != nil {
 		logging.Logger.WithFields(logrus.Fields{"module": "counter", "error": err}).Warning("Error getting counter owner")
 		c.Status(http.StatusBadRequest)
@@ -76,11 +85,12 @@ func DeleteCounter(c *gin.Context) {
 		return
 	}
 
-	if err := database.DeleteCounter(c.Request.Context(), req.RowID); err != nil {
+	if err := database.DeleteCounter(ctx, req.RowID); err != nil {
 		logging.Logger.WithFields(logrus.Fields{"module": "counter", "error": err}).Warning("Error deleting counter")
 		c.Status(http.StatusInternalServerError)
 		return
 	}
+
 	c.Status(http.StatusNoContent)
 }
 
@@ -90,6 +100,9 @@ func CreateCounter(c *gin.Context) {
 		c.Status(http.StatusUnauthorized)
 		return
 	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Second*15)
+	defer cancel()
 
 	var req models.CreateCounterWithResetInput
 
@@ -105,7 +118,7 @@ func CreateCounter(c *gin.Context) {
 		return
 	}
 
-	counterID, err := database.CreateCounterWithReset(c.Request.Context(), user.Uuid, user.Username, &req.Counter, &req.Reset)
+	counterID, err := database.CreateCounterWithReset(ctx, user.Uuid, user.Username, &req.Counter, &req.Reset)
 	if err != nil {
 		logging.Logger.WithFields(logrus.Fields{"module": "counters", "error": err}).Warning("Error creating new database")
 		c.Status(http.StatusBadRequest)
@@ -121,4 +134,6 @@ func Routes(r *gin.RouterGroup) {
 	cGroup.GET("/:id")
 	cGroup.POST("", CreateCounter)
 	cGroup.DELETE("", DeleteCounter)
+
+	cGroup.Handle("QUERY", "", GetCounters)
 }

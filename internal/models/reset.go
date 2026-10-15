@@ -13,5 +13,5 @@ type ResetListPart struct {
 	ResetDescription string `json:"reset_description"`
 	ResetOwner       string `json:"reset_owner"`
 	ResetUsername    string `json:"reset_username"`
-	ResetOccuredAt   int64  `json:"reset_occured_at"`
+	ResetOccurredAt  int64  `json:"reset_occurred_at"`
 }

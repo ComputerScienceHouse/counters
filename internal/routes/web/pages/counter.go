@@ -32,23 +32,13 @@ func GetCounterPage(c *gin.Context) {
 		return
 	}
 
-	history, err := database.GetResetsFromCounterId(c.Request.Context(), idToUse)
-	if err != nil {
-		logging.Logger.WithFields(logrus.Fields{"module": "reset", "error": err}).Warning("Error getting history for counter")
-		c.JSON(http.StatusBadRequest, models.NewErrorResponse())
-		return
-	}
-
-	logging.Logger.Info(counter.CounterDescription)
-
 	c.HTML(http.StatusOK, "counter.tmpl", gin.H{
-		"Id":          counter.CounterID,
-		"CounterID":   counter.CounterOwner,
-		"Title":       counter.CounterTitle,
-		"Description": counter.CounterDescription,
-		"Timestamp":   counter.ResetOccuredAt,
+		"CounterID":           counter.CounterID,
+		"CounterOwnerUUID":    counter.CounterOwner,
+		"CounterTitle":        counter.CounterTitle,
+		"CounterDescription":  counter.CounterDescription,
+		"MostRecentTimestamp": counter.ResetOccuredAt,
 
-		"History":  history,
 		"Username": user.Username,
 		"FullName": user.FullName,
 		"UserID":   user.Uuid,

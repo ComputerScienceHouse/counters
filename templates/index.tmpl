@@ -1,0 +1,122 @@
+{{ define "index.tmpl"}}
+{{ template "header.tmpl" . }}
+    <template id="counter-card-template">
+        <li class="p-1">
+            <a class="text-center list-group-item list-group-item-action p-3" href="#">
+                <span class="fs-5 counter-title"></span>
+                <br/>
+                <span class="days-since fw-bold display-1 timestamp"> </span>
+                <br/>
+                <span class="description"><i><span class="reset-description"></span>(reported by <span class="reset-username"></span>)</i></span>
+            </a>
+        </li>
+    </template>
+
+    <div class="container main p-5">
+        <h2 class="text-center w-100 mb-3">
+            <div class="">Days Since...</div>
+        </h2>
+        <br/>
+        <input class="form-control w-75 mx-auto" type="text" placeholder= "Find Counters">
+        <br/>
+        <div>
+            <ul id="counter-list" class="counter-list list-group list-unstyled text-wrap text-break"></ul>
+        </div>
+        <div id="scroll-sentinel" style="height:1px"></div> {{/* hi storemcloud! */}}
+        <script>
+        (() => {
+            'use strict'
+
+            let currentSearchFilter = ""
+
+            function daysSince(ts) {
+                return Math.floor((Date.now() - ts * 1000) / 86400000);
+            }
+
+            function debounce(fn, delay) {
+                let timer;
+                return function (...args) {
+                clearTimeout(timer);
+                timer = setTimeout(() => fn.apply(this, args), delay);
+                };
+            }
+
+            const template = document.getElementById("counter-card-template");
+            const list = document.getElementById("counter-list");
+            let loading = false;
+            let done = false;
+            let timestamp = null
+
+            function clearCounters() {
+                list.replaceChildren();   
+                timestamp = null;         
+                done = false;
+                loading = false;
+                observer.observe(document.getElementById("scroll-sentinel")); 
+                loadMore();
+            }
+
+            function renderCounter(c) {
+                const li = template.content.firstElementChild.cloneNode(true);
+                li.querySelector("a").href = `/counter/${encodeURIComponent(c.counter_id)}`;
+                li.querySelector(".counter-title").textContent = c.counter_title;
+                li.querySelector(".reset-description").textContent = c.reset_description + " ";
+                li.querySelector(".reset-username").textContent = c.reset_username;
+                li.querySelector(".days-since").textContent = daysSince(c.reset_timestamp);
+                return li;
+            }
+
+            async function loadMore() {
+                if (loading || done) return;
+                loading = true;
+
+                console.log(currentSearchFilter)
+
+                try {
+                    const res = await fetch("/api/v1/counter", {
+                        method: "QUERY",
+                        credentials: "include",
+                        headers: { "Content-Type": "application/json"},
+                        body: JSON.stringify({"filter": {"timestamp": timestamp, "sort_descending": true, "name": currentSearchFilter} }),
+                    });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const data = await res.json();
+
+                    const frag = document.createDocumentFragment();
+                    data.counters.forEach(c => frag.appendChild(renderCounter(c)));
+                    list.appendChild(frag);
+
+                    const last = data.counters.at(-1);
+                    if (data.timestamp) timestamp = data.timestamp;
+
+                    if (data.counters.length === 0 || !data.has_more) {
+                    done = true;
+                    observer.disconnect();
+                    }
+                } catch (err) {
+                    console.error("Error loading more:", err);
+                } finally {
+                    loading = false;
+                }
+            }
+
+            const debouncedSearch = debounce(clearCounters, 500);
+
+            document.querySelector('input').addEventListener('input', function() {
+                const query = this.value.toLowerCase();
+
+                currentSearchFilter = this.value
+                debouncedSearch()
+            });
+
+            const observer = new IntersectionObserver(entries => {
+                if (entries[0].isIntersecting) loadMore();
+            }, { rootMargin: "300px" });
+            observer.observe(document.getElementById("scroll-sentinel"));
+
+            })()
+        </script>
+    </div>
+</body>
+</html>
+{{end}}
