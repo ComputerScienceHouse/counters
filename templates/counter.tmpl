@@ -11,6 +11,8 @@
                   <span class="fs-5 reset-desc"></span>
                   <br/>
                   <span class="description"><i>reported by: <span class="reset-user"></span></i></span>
+                  <br/>
+                  <span class="description"><i><span class="reset-timestamp"></span></i></span>
                 </div>
               </div>
               <div class="col">
@@ -98,6 +100,14 @@
       return Math.floor((Date.now() - ts * 1000) / 86400000);
     }
 
+    function renderTimestamp(ts) {
+      const date = new Date(ts * 1000);
+      const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+      return `${weekdays[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()} at ${date.getHours() % 12 == 0 ? "12" : date.getHours() % 12}:${date.getMinutes().toString().padStart(2, "0")} ${date.getHours() < 12 ? "AM" : "PM"}`;
+    }
+
     document.getElementById("deleteReset").addEventListener("show.bs.modal", function(event) {
         let button = event.relatedTarget
         document.getElementById("reset-modal-reset-id").value = button.getAttribute("data-reset-id")
@@ -174,6 +184,7 @@
       const li = template.content.firstElementChild.cloneNode(true);
       li.querySelector(".reset-desc").textContent = r.description;
       li.querySelector(".reset-user").textContent = r.username;
+      li.querySelector(".reset-timestamp").textContent = renderTimestamp(r.timestamp);
       li.querySelector(".days-since").textContent = daysSince(r.timestamp);
 
       if (r.can_delete) {
@@ -181,6 +192,10 @@
         btn.dataset.resetId = r.id;
         btn.dataset.counterId = counterId;
       } else {
+        const div = li.querySelector(".border-bottom");
+        div.classList.remove("border-bottom");
+        div.classList.remove("mb-2");
+
         li.querySelector(".reset-actions").remove();
       }
       return li;
