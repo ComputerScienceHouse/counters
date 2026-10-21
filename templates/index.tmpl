@@ -41,20 +41,13 @@
                 };
             }
 
+            const sentinel = document.getElementById("scroll-sentinel");
             const template = document.getElementById("counter-card-template");
             const list = document.getElementById("counter-list");
             let loading = false;
             let done = false;
             let timestamp = null
 
-            function clearCounters() {
-                list.replaceChildren();   
-                timestamp = null;         
-                done = false;
-                loading = false;
-                observer.observe(document.getElementById("scroll-sentinel")); 
-                loadMore();
-            }
 
             function renderCounter(c) {
                 const li = template.content.firstElementChild.cloneNode(true);
@@ -97,7 +90,25 @@
                     console.error("Error loading more:", err);
                 } finally {
                     loading = false;
+                    if (!done) {
+                        observer.unobserve(sentinel);
+                        observer.observe(sentinel);
+                    }
                 }
+            }
+
+            const observer = new IntersectionObserver(entries => {
+                if (entries[0].isIntersecting) loadMore();
+            }, { rootMargin: "300px" });
+            observer.observe(sentinel);
+
+            function clearCounters() {
+                list.replaceChildren();
+                timestamp = null;
+                done = false;
+                loading = false;
+                observer.observe(sentinel);
+                loadMore();
             }
 
             const debouncedSearch = debounce(clearCounters, 500);
@@ -109,12 +120,8 @@
                 debouncedSearch()
             });
 
-            const observer = new IntersectionObserver(entries => {
-                if (entries[0].isIntersecting) loadMore();
-            }, { rootMargin: "300px" });
-            observer.observe(document.getElementById("scroll-sentinel"));
-
-            })()
+            loadMore()
+        })()
         </script>
     </div>
 </body>
