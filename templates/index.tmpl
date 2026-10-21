@@ -1,8 +1,8 @@
 {{ define "index.tmpl"}}
 {{ template "header.tmpl" . }}
     <template id="counter-card-template">
-        <li class="p-1">
-            <a class="text-center list-group-item list-group-item-action p-3" href="#">
+        <li class="col p-1">
+            <a class="h-100 align-content-center text-center list-group-item list-group-item-action p-3" href="#">
                 <span class="fs-5 counter-title"></span>
                 <br/>
                 <span class="days-since fw-bold display-1 timestamp"> </span>
@@ -19,8 +19,8 @@
         <br/>
         <input class="form-control w-75 mx-auto" type="text" placeholder= "Find Counters">
         <br/>
-        <div>
-            <ul id="counter-list" class="counter-list list-group list-unstyled text-wrap text-break"></ul>
+        <div class="container">
+            <ul id="counter-list" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-0 counter-list list-group list-unstyled flex-row"></ul>
         </div>
         <div id="scroll-sentinel" style="height:1px"></div> {{/* hi storemcloud! */}}
         <script>
