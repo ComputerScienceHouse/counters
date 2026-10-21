@@ -192,6 +192,10 @@
         btn.dataset.resetId = r.id;
         btn.dataset.counterId = counterId;
       } else {
+        const div = li.querySelector(".border-bottom");
+        div.classList.remove("border-bottom");
+        div.classList.remove("mb-2");
+
         li.querySelector(".reset-actions").remove();
       }
       return li;
